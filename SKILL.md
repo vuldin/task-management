@@ -60,6 +60,61 @@ done
 - `medium` - Normal priority
 - `low` - Nice to have
 
+## Handling "New Task for X" Prompts
+
+When the user says something like "new task for projectname" or "add task to projectname":
+
+### Step 1: Parse the Project Name
+Extract the project name from the prompt. Common patterns:
+- "new task for **projectname**"
+- "add task to **projectname**"
+- "create tasks for **projectname**"
+- "**projectname** needs a new task"
+
+### Step 2: Locate the Project Folder
+Look for the project folder in the current directory structure:
+```bash
+# Check if project folder exists (case-insensitive matching)
+ls -d */ 2>/dev/null | grep -i "<project_name>"
+```
+
+The project folder should be at: `./<project_name>/`
+
+### Step 3: Read the Project's TODO.md
+Read the existing TODO.md to:
+1. Understand the current table format
+2. Find the highest existing task ID
+3. Preserve any existing tasks
+
+```bash
+# Check for TODO.md in the project folder
+cat ./<project_name>/TODO.md
+```
+
+### Step 4: Determine Next Task ID
+Find the highest ID in the project's TODO.md:
+```bash
+# Find highest task ID in the project
+grep -h "^| [0-9]" ./<project_name>/TODO.md 2>/dev/null | \
+  sed 's/^| \([0-9]*\) .*/\1/' | sort -n | tail -1
+```
+
+Next ID = highest found + 1 (or 1 if no tasks exist)
+
+### Step 5: Add Tasks to Project TODO.md
+Add each task to BOTH:
+1. The Quick Reference table at the top
+2. The detailed Tasks section below
+
+### Step 6: Provide Summary
+Always end with a summary:
+- File modified (full path)
+- Tasks added (ID, title, status)
+
+**IMPORTANT:** Do NOT use the TaskCreate/TaskUpdate/TaskList tools for project-specific tasks. Those tools are for session-level task tracking. Project tasks go in TODO.md files.
+
+---
+
 ## Workflow
 
 ### 1. When Starting Work
