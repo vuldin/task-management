@@ -4,44 +4,28 @@ Manage tasks across nested projects with automatic TODO.md discovery and sequent
 
 ## Installation
 
-Tell your LLM assistant:
+Clone into your project's `.claude/skills` directory:
 
-> "Install the task-management skill from https://github.com/vuldin/task-management"
-
-Or copy `SKILL.md` to your tool's skills directory.
-
-## Quick Start
-
-Create a `TODO.md` in your project root:
-
-```markdown
-## Quick Reference
-
-| ID | Title | Status | Priority |
-|----|-------|--------|----------|
-| 1  | Example task | In Progress | High |
-
----
-
-#### 1. Example task
-**Status**: 🔄 In Progress  
-**Priority**: High  
-**Description**: Task description here
+```bash
+git clone https://github.com/vuldin/task-management.git .claude/skills/task-management
 ```
 
-Then ask your LLM:
+## Usage
 
-> "List my tasks"  
-> "Mark task 1 complete"  
-> "Add a new task for implementing auth"
+```
+list tasks
+create task: <title>
+mark task <id> complete
+update task <id> status to in_progress
+```
 
 ## How It Works
 
 - **Auto-discovery**: Finds all `TODO.md` files in subdirectories
-- **Global IDs**: Task IDs are sequential across all projects (1, 2, 3...)
-- **Status icons**: ⬜ pending | 🔄 in_progress | 🚫 blocked | ✅ complete
+- **Global IDs**: Sequential across all projects (1, 2, 3...)
+- **Status**: pending | in_progress | blocked | complete
 
-Add project-specific TODOs anywhere:
+Project structure:
 ```
 project/
 ├── TODO.md
