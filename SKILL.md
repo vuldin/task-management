@@ -13,26 +13,39 @@ This skill provides task tracking across nested projects with automatic TODO.md 
 
 **WHEN THE USER SAYS "list tasks", YOU MUST:**
 
-1. **DYNAMICALLY DISCOVER ALL TODO.md FILES** - Use `find` to locate ALL TODO.md files
-2. **USE SHELL COMMANDS ONLY** - Never use `ReadFile` on TODO.md files
-3. **RUN THE VALIDATION CHECKLIST** - Check for completed tasks, wrong locations, missing tasks
-4. **FIX ANY ISSUES BEFORE SHOWING OUTPUT** - Do not show bad data to user
-5. **USE EXACT OUTPUT FORMAT** - As specified below
+1. **RUN THE SCRIPT** - Execute `.claude/skills/task-management/list-tasks.sh`
+2. **COPY THE OUTPUT INTO YOUR RESPONSE** - The script output goes directly in your
+   response message. Do NOT summarize it. Do NOT describe it. Do NOT say "here are the results."
+   Just paste the raw output.
+
+**EXAMPLE OF CORRECT RESPONSE:**
+```
+## Root
+
+| ID | Title | Status | Priority |
+|----|-------|--------|----------|
+| 1  | Task One | 📋 Pending | 🔴 High |
+
+## CLI
+...
+```
+
+**EXAMPLE OF WRONG RESPONSE:**
+"I ran the script, here are the results:"  ← NEVER ADD THIS
+[script output]
+
+**That's it.** The script handles dynamic discovery and filtering. No validation needed at list time.
 
 **⛔ NEVER:**
-- Assume only certain TODO.md files exist
-- Use `ReadFile` tool to read TODO.md files for "list tasks"
-- Skip the validation checklist
-- Show output with completed tasks
-- Create your own output format or add summaries
-- Show output before validation passes
-- Add extra tables, counts, or summaries
+- Run validation checks during `list tasks`
+- Fix TODO.md files during `list tasks`
+- Delay showing output to run checks
+- Add extra summaries or commentary after the script output
 
 **✅ ALWAYS:**
-- Run the `list-tasks.sh` script from the skill folder
-- Validate FIRST - Run checklist, fix issues, then show output
-- Show clean, accurate output from ALL subprojects
-- Output ends after the script runs - No additional commentary
+- Run the script and immediately show output
+- Trust the script to filter completed tasks
+- Let the completion workflow handle validation
 
 ---
 
@@ -60,96 +73,11 @@ This skill provides task tracking across nested projects with automatic TODO.md 
 
 ---
 
-## Step 1: RUN THE LIST TASKS SCRIPT
-
-**Use the provided script to list all active tasks:**
-
-```bash
-.claude/skills/task-management/list-tasks.sh
-```
-
-**What the script does:**
-- Discovers all TODO.md files dynamically
-- Extracts active tasks from Quick Reference tables
-- Sorts by priority (Critical → High → Medium → Low), then by ID
-- Displays formatted markdown tables per project
-- Shows task count summary and next available ID
-
-**Script location:** `.claude/skills/task-management/list-tasks.sh`
-
----
-
-## Step 2: VALIDATION CHECKLIST (MUST RUN - DO NOT SKIP)
-
-**AFTER running the list command, you MUST verify output BEFORE showing to user:**
-
-### 2a. Check for completed tasks in Quick Reference
-```bash
-find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target | while read -r file; do
-  result=$(awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && (/Complete/ || /✅/ || /Done/){print}' "$file" 2>/dev/null)
-  if [ -n "$result" ]; then
-    echo "ISSUE: Completed tasks found in $file Quick Reference:"
-    echo "$result"
-  fi
-done
-```
-
-### 2b. Check for missing tasks (in detailed descriptions but not in Quick Reference)
-```bash
-echo "Tasks missing from Quick Reference:"
-find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -u > /tmp/all_tasks.txt
-find . -name "TODO.md" -exec awk '/## Detailed Task Descriptions/{exit} /^\| [0-9]+ \|/{print}' {} \; 2>/dev/null | sed 's/| \([0-9]*\).*/\1/' | sort -u > /tmp/qr_tasks.txt
-comm -23 /tmp/all_tasks.txt /tmp/qr_tasks.txt
-```
-
-### 2c. Checklist - ALL must pass before showing output:
-- [ ] No ✅/Complete/Done tasks in output
-- [ ] Priority sorting: Critical → High → Medium → Low
-- [ ] ALL subprojects included: Root, CLI, Contracts, Discovery, Website, etc.
-- [ ] Root only has cross-project tasks (spanning 2+ subprojects)
-- [ ] Each subproject table has only its own tasks
-- [ ] All rows are markdown table format (| ID | Title | Status | Priority |)
-
-**If any check fails:**
-1. DO NOT show output to user yet
-2. Fix the issues (see "Step 3: Fix Issues" below)
-3. Re-run the list command
-4. Re-validate
-5. Only show to user after all checks pass
-
----
-
-## Step 3: FIX ISSUES (If Found)
-
-### Issue A: Completed task in Quick Reference table
-
-**Fix:** Remove the row from the table using StrReplaceFile
-
-### Issue B: Task in wrong file
-
-| Task Type | Should Be In | Action |
-|-----------|--------------|--------|
-| Cross-project (2+ subprojects) | Root TODO.md | Move from subproject to root |
-| CLI-only | cli/TODO.md | Move from root/contracts to cli |
-| Contract-only | contracts/TODO.md | Move from root/cli to contracts |
-
-### Issue C: Missing task from Quick Reference
-
-**Fix:** Add the row to the appropriate Quick Reference table in priority-sorted position
-
----
-
-## Step 4: SHOW OUTPUT
-
-Only after all validation checks pass, show the clean output to the user.
-
----
-
-## User Options for "list tasks"
+## User Options
 
 | User Says | Action |
 |-----------|--------|
-| "list tasks" | Show ONLY active tasks (pending/in_progress/blocked), properly filtered and organized |
+| "list tasks" | Run `list-tasks.sh` and show output immediately |
 | "list all tasks" | Show ALL tasks including completed |
 | "list completed tasks" | Show only completed tasks |
 | "show task 51" | Show specific task details - USE ReadFile on appropriate TODO.md |
@@ -173,11 +101,6 @@ All TODO.md files should have a **Quick Reference** table at the top for fast pa
 2. **Keep sorted** - Priority order: Critical → High → Medium → Low
 3. **Remove on completion** - Immediately delete row when task completes
 4. **Consistent columns** - All tables use: ID, Title, Status, Priority
-
-**⚠️ CRITICAL: When marking a task complete, you MUST:**
-1. Update the task's status to `✅ Complete` in its detailed section
-2. **REMOVE the row from Quick Reference table** (this table is ONLY for active tasks)
-3. Add completion date to the task description
 
 ---
 
@@ -215,13 +138,46 @@ All TODO.md files should have a **Quick Reference** table at the top for fast pa
 
 ### 3. Marking Tasks Complete
 
-When user says a task is complete:
+When user says a task is complete, follow these steps:
+
+#### Step 1: Update Task Status
 1. Find the task in the appropriate TODO.md
-2. Update status to `complete` (or ✅ Complete) in the task description
-3. **REMOVE from Quick Reference table** - delete the entire row
-4. Add completion date if not present
-5. Move to "Completed Tasks" section if there is one
-6. Update any relevant context
+2. Update status to `✅ Complete` in the task description
+3. Add completion date if not present
+4. Move to "Completed Tasks" section if there is one
+
+#### Step 2: Remove from Quick Reference (MANDATORY)
+**Delete the task row from the Quick Reference table.** This table is ONLY for active tasks.
+
+Example: Remove this row from the table:
+```markdown
+| 51 | Add canDeleteProfile() Function | 📋 Pending | 🟠 High |
+```
+
+#### Step 3: Validate TODO.md State
+**AFTER completing a task, run validation to ensure the file is clean:**
+
+```bash
+# Check for completed tasks still in Quick Reference
+find . -name "TODO.md" -type f 2>/dev/null | while read -r file; do
+  result=$(awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && (/Complete/ || /✅/ || /Done/){print}' "$file" 2>/dev/null)
+  if [ -n "$result" ]; then
+    echo "WARNING: Completed tasks found in $file Quick Reference:"
+    echo "$result"
+  fi
+done
+```
+
+**If completed tasks are found in Quick Reference:**
+1. **DO NOT ignore this** - the file is in an invalid state
+2. Remove the completed task rows immediately using StrReplaceFile
+3. Re-run the validation check to confirm it's clean
+4. Only proceed after the check passes
+
+**Validation is required at completion time to ensure:**
+- Quick Reference tables only contain active tasks
+- `list tasks` output is always accurate
+- No manual cleanup needed later
 
 ### 4. Creating New Tasks
 
