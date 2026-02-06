@@ -12,8 +12,26 @@ git clone https://github.com/vuldin/task-management.git .claude/skills/task-mana
 
 ## Usage
 
+### Listing Tasks
+
+Use the provided script to list all active tasks:
+
+```bash
+.claude/skills/task-management/list-tasks.sh
+```
+
+Or copy it to your project for easier access:
+
+```bash
+cp .claude/skills/task-management/list-tasks.sh .claude/scripts/
+./.claude/scripts/list-tasks.sh
+```
+
+### Kimi Commands
+
 ```
 list tasks
+list all tasks
 create task: <title>
 mark task <id> complete
 update task <id> status to in_progress
@@ -24,11 +42,26 @@ update task <id> status to in_progress
 - **Auto-discovery**: Finds all `TODO.md` files in subdirectories
 - **Global IDs**: Sequential across all projects (1, 2, 3...)
 - **Status**: pending | in_progress | blocked | complete
+- **Priority**: Critical | High | Medium | Low
 
-Project structure:
+## Project Structure
+
 ```
 project/
-├── TODO.md
-├── backend/TODO.md
-└── frontend/TODO.md
+├── TODO.md                    # Cross-project tasks
+├── cli/TODO.md               # CLI-only tasks
+├── contracts/TODO.md         # Contract-only tasks
+└── .claude/
+    └── skills/
+        └── task-management/
+            ├── SKILL.md      # Full documentation
+            └── list-tasks.sh # Helper script
 ```
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `SKILL.md` | Complete skill documentation for Kimi |
+| `list-tasks.sh` | Shell script to list all active tasks |
+| `README.md` | This file |

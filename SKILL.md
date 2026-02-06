@@ -29,11 +29,10 @@ This skill provides task tracking across nested projects with automatic TODO.md 
 - Add extra tables, counts, or summaries
 
 **✅ ALWAYS:**
-- Dynamically discover TODO.md files using `find` command
+- Run the `list-tasks.sh` script from the skill folder
 - Validate FIRST - Run checklist, fix issues, then show output
-- Use the EXACT Shell command from Step 1
 - Show clean, accurate output from ALL subprojects
-- Output ends after Step 1 command - No additional commentary
+- Output ends after the script runs - No additional commentary
 
 ---
 
@@ -61,40 +60,22 @@ This skill provides task tracking across nested projects with automatic TODO.md 
 
 ---
 
-## Step 1: EXACT COMMAND for "list tasks"
+## Step 1: RUN THE LIST TASKS SCRIPT
 
-**COPY AND PASTE THIS EXACT COMMAND:**
+**Use the provided script to list all active tasks:**
 
 ```bash
-show_section() {
-  local name="$1" file="$2"
-  [ -f "$file" ] || return
-  printf '\n## %s\n\n' "$name"
-  printf '| ID | Title | Status | Priority |\n'
-  printf '|----|-------|--------|----------|\n'
-  awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && !/ID.*Title/ && !/Complete/ && !/✅/ && !/Done/ {
-    gsub(/^\|[ \t]*/, ""); gsub(/[ \t]*\|$/, "")
-    split($0, p, /\s*\|\s*/)
-    if (p[4] ~ /Critical/) ord=1; else if (p[4] ~ /High/) ord=2; else if (p[4] ~ /Medium/) ord=3; else ord=4
-    printf "%d|%04d|%s|%s|%s|%s\n", ord, p[1], p[1], p[2], p[3], p[4]
-  }' "$file" | sort -t'|' -k1,1n -k2,2n | cut -d'|' -f3- | while IFS='|' read -r id title status priority; do
-    printf '| %s | %s | %s | %s |\n' "$id" "$title" "$status" "$priority"
-  done
-}
-
-show_section "Root (Cross-Project Tasks)" "TODO.md"
-show_section "cli - CLI-Only Tasks" "cli/TODO.md"
-show_section "contracts - Contract-Only Tasks" "contracts/TODO.md"
-show_section "discovery - Discovery Service Tasks" "discovery/TODO.md"
-show_section "drasil-co-site - Website Tasks" "drasil-co-site/TODO.md"
-
-printf "\n"
-printf '%s\n' "---------------------------------------------------------------------"
-cnt=$(find . -name "TODO.md" -exec awk '/## Detailed Task Descriptions/{exit} /^\| [0-9]+ \|/ && !/ID.*Title/ && !/Complete/ && !/✅/ && !/Done/' {} \; 2>/dev/null | wc -l)
-next=$(find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -n | tail -1)
-printf "%s active tasks across all projects.\n" "$cnt"
-printf "Next available task ID: %s\n\n" "$((next + 1))"
+.claude/skills/task-management/list-tasks.sh
 ```
+
+**What the script does:**
+- Discovers all TODO.md files dynamically
+- Extracts active tasks from Quick Reference tables
+- Sorts by priority (Critical → High → Medium → Low), then by ID
+- Displays formatted markdown tables per project
+- Shows task count summary and next available ID
+
+**Script location:** `.claude/skills/task-management/list-tasks.sh`
 
 ---
 
@@ -296,6 +277,8 @@ find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#
 
 **CRITICAL: Always dynamically discover TODO.md files - never hardcode paths.**
 
+The `list-tasks.sh` script handles this automatically, but if you need to find files manually:
+
 ```bash
 # Find all TODO.md files dynamically
 find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target
@@ -310,4 +293,24 @@ find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v targ
 | `./discovery/TODO.md` | Discovery Service | Discovery service tasks |
 | `./drasil-co-site/TODO.md` | Website | Website tasks |
 
-**⚠️ IMPORTANT:** New subprojects may be added anytime. **Always use the `find` command** to discover TODO.md files dynamically.
+**⚠️ IMPORTANT:** New subprojects may be added anytime. The script handles this by using `find` to discover TODO.md files dynamically.
+
+---
+
+## Skill Files
+
+This skill includes a helper script that can be checked into your project:
+
+| File | Purpose |
+|------|---------|
+| `SKILL.md` | This documentation |
+| `list-tasks.sh` | Executable script to list all active tasks |
+
+**To use in your project:**
+```bash
+# Copy the script to your project (optional - can also run from skill folder)
+cp .claude/skills/task-management/list-tasks.sh .claude/scripts/
+
+# Run it
+./.claude/scripts/list-tasks.sh
+```
