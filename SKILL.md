@@ -7,44 +7,43 @@ description: Manage tasks across nested projects with sequential ID tracking. Us
 
 This skill provides task tracking across nested projects with automatic TODO.md discovery and sequential ID management.
 
+---
+
+## 🚨 CRITICAL: HANDLING "list tasks" COMMAND
+
+**WHEN THE USER SAYS "list tasks", YOU MUST:**
+
+1. **DYNAMICALLY DISCOVER ALL TODO.md FILES** - Use `find` to locate ALL TODO.md files
+2. **USE SHELL COMMANDS ONLY** - Never use `ReadFile` on TODO.md files
+3. **RUN THE VALIDATION CHECKLIST** - Check for completed tasks, wrong locations, missing tasks
+4. **FIX ANY ISSUES BEFORE SHOWING OUTPUT** - Do not show bad data to user
+5. **USE EXACT OUTPUT FORMAT** - As specified below
+
+**⛔ NEVER:**
+- Assume only certain TODO.md files exist
+- Use `ReadFile` tool to read TODO.md files for "list tasks"
+- Skip the validation checklist
+- Show output with completed tasks
+- Create your own output format or add summaries
+- Show output before validation passes
+- Add extra tables, counts, or summaries
+
+**✅ ALWAYS:**
+- Dynamically discover TODO.md files using `find` command
+- Validate FIRST - Run checklist, fix issues, then show output
+- Use the EXACT Shell command from Step 1
+- Show clean, accurate output from ALL subprojects
+- Output ends after Step 1 command - No additional commentary
+
+---
+
 ## Task ID System
 
 - **Sequential IDs**: Start at 1, increment across ALL subprojects
 - **No ranges**: IDs are simply sequential (1, 2, 3, 49, 50, etc.)
 - **Cross-project**: Task 1 in one folder and Task 2 in another - IDs are unique across all projects
 
-## Auto-Discover TODO Files
-
-Always scan for TODO.md files before working with tasks:
-
-```bash
-# Find all TODO.md files
-find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target | grep -v ".git"
-```
-
-TODO.md files can exist at any level:
-- `./TODO.md` (root cross-project tasks)
-- `./project-a/TODO.md`
-- `./project-b/TODO.md`
-- Any subdirectory may have one
-
-## Quick Reference Tables
-
-All TODO.md files should have a **Quick Reference** table at the top for fast parsing:
-
-```markdown
-| ID | Title | Status | Priority | Location |
-|----|-------|--------|----------|----------|
-| 9  | Clean up CLI... | Pending | High | root |
-```
-
-**Parse the quick reference table** for fast task listing:
-```bash
-# Extract all active tasks from quick reference tables
-for file in $(find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target | grep -v ".git"); do
-  awk '/^\| [0-9]+ \|/ && !/ID.*Title/' "$file" 2>/dev/null
-done
-```
+---
 
 ## Status & Priority Values
 
@@ -60,58 +59,160 @@ done
 - `medium` - Normal priority
 - `low` - Nice to have
 
-## Handling "New Task for X" Prompts
+---
 
-When the user says something like "new task for projectname" or "add task to projectname":
+## Step 1: EXACT COMMAND for "list tasks"
 
-### Step 1: Parse the Project Name
-Extract the project name from the prompt. Common patterns:
-- "new task for **projectname**"
-- "add task to **projectname**"
-- "create tasks for **projectname**"
-- "**projectname** needs a new task"
-
-### Step 2: Locate the Project Folder
-Look for the project folder in the current directory structure:
-```bash
-# Check if project folder exists (case-insensitive matching)
-ls -d */ 2>/dev/null | grep -i "<project_name>"
-```
-
-The project folder should be at: `./<project_name>/`
-
-### Step 3: Read the Project's TODO.md
-Read the existing TODO.md to:
-1. Understand the current table format
-2. Find the highest existing task ID
-3. Preserve any existing tasks
+**COPY AND PASTE THIS EXACT COMMAND:**
 
 ```bash
-# Check for TODO.md in the project folder
-cat ./<project_name>/TODO.md
+show_section() {
+  local name="$1" file="$2"
+  [ -f "$file" ] || return
+  printf '\n## %s\n\n' "$name"
+  printf '| ID | Title | Status | Priority |\n'
+  printf '|----|-------|--------|----------|\n'
+  awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && !/ID.*Title/ && !/Complete/ && !/✅/ && !/Done/ {
+    gsub(/^\|[ \t]*/, ""); gsub(/[ \t]*\|$/, "")
+    split($0, p, /\s*\|\s*/)
+    if (p[4] ~ /Critical/) ord=1; else if (p[4] ~ /High/) ord=2; else if (p[4] ~ /Medium/) ord=3; else ord=4
+    printf "%d|%04d|%s|%s|%s|%s\n", ord, p[1], p[1], p[2], p[3], p[4]
+  }' "$file" | sort -t'|' -k1,1n -k2,2n | cut -d'|' -f3- | while IFS='|' read -r id title status priority; do
+    printf '| %s | %s | %s | %s |\n' "$id" "$title" "$status" "$priority"
+  done
+}
+
+show_section "Root (Cross-Project Tasks)" "TODO.md"
+show_section "cli - CLI-Only Tasks" "cli/TODO.md"
+show_section "contracts - Contract-Only Tasks" "contracts/TODO.md"
+show_section "discovery - Discovery Service Tasks" "discovery/TODO.md"
+show_section "drasil-co-site - Website Tasks" "drasil-co-site/TODO.md"
+
+printf "\n"
+printf '%s\n' "---------------------------------------------------------------------"
+cnt=$(find . -name "TODO.md" -exec awk '/## Detailed Task Descriptions/{exit} /^\| [0-9]+ \|/ && !/ID.*Title/ && !/Complete/ && !/✅/ && !/Done/' {} \; 2>/dev/null | wc -l)
+next=$(find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -n | tail -1)
+printf "%s active tasks across all projects.\n" "$cnt"
+printf "Next available task ID: %s\n\n" "$((next + 1))"
 ```
 
-### Step 4: Determine Next Task ID
-Find the highest ID in the project's TODO.md:
+---
+
+## Step 2: VALIDATION CHECKLIST (MUST RUN - DO NOT SKIP)
+
+**AFTER running the list command, you MUST verify output BEFORE showing to user:**
+
+### 2a. Check for completed tasks in Quick Reference
 ```bash
-# Find highest task ID in the project
-grep -h "^| [0-9]" ./<project_name>/TODO.md 2>/dev/null | \
-  sed 's/^| \([0-9]*\) .*/\1/' | sort -n | tail -1
+find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target | while read -r file; do
+  result=$(awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && (/Complete/ || /✅/ || /Done/){print}' "$file" 2>/dev/null)
+  if [ -n "$result" ]; then
+    echo "ISSUE: Completed tasks found in $file Quick Reference:"
+    echo "$result"
+  fi
+done
 ```
 
-Next ID = highest found + 1 (or 1 if no tasks exist)
+### 2b. Check for missing tasks (in detailed descriptions but not in Quick Reference)
+```bash
+echo "Tasks missing from Quick Reference:"
+find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -u > /tmp/all_tasks.txt
+find . -name "TODO.md" -exec awk '/## Detailed Task Descriptions/{exit} /^\| [0-9]+ \|/{print}' {} \; 2>/dev/null | sed 's/| \([0-9]*\).*/\1/' | sort -u > /tmp/qr_tasks.txt
+comm -23 /tmp/all_tasks.txt /tmp/qr_tasks.txt
+```
 
-### Step 5: Add Tasks to Project TODO.md
-Add each task to BOTH:
-1. The Quick Reference table at the top
-2. The detailed Tasks section below
+### 2c. Checklist - ALL must pass before showing output:
+- [ ] No ✅/Complete/Done tasks in output
+- [ ] Priority sorting: Critical → High → Medium → Low
+- [ ] ALL subprojects included: Root, CLI, Contracts, Discovery, Website, etc.
+- [ ] Root only has cross-project tasks (spanning 2+ subprojects)
+- [ ] Each subproject table has only its own tasks
+- [ ] All rows are markdown table format (| ID | Title | Status | Priority |)
 
-### Step 6: Provide Summary
-Always end with a summary:
-- File modified (full path)
-- Tasks added (ID, title, status)
+**If any check fails:**
+1. DO NOT show output to user yet
+2. Fix the issues (see "Step 3: Fix Issues" below)
+3. Re-run the list command
+4. Re-validate
+5. Only show to user after all checks pass
 
-**IMPORTANT:** Do NOT use the TaskCreate/TaskUpdate/TaskList tools for project-specific tasks. Those tools are for session-level task tracking. Project tasks go in TODO.md files.
+---
+
+## Step 3: FIX ISSUES (If Found)
+
+### Issue A: Completed task in Quick Reference table
+
+**Fix:** Remove the row from the table using StrReplaceFile
+
+### Issue B: Task in wrong file
+
+| Task Type | Should Be In | Action |
+|-----------|--------------|--------|
+| Cross-project (2+ subprojects) | Root TODO.md | Move from subproject to root |
+| CLI-only | cli/TODO.md | Move from root/contracts to cli |
+| Contract-only | contracts/TODO.md | Move from root/cli to contracts |
+
+### Issue C: Missing task from Quick Reference
+
+**Fix:** Add the row to the appropriate Quick Reference table in priority-sorted position
+
+---
+
+## Step 4: SHOW OUTPUT
+
+Only after all validation checks pass, show the clean output to the user.
+
+---
+
+## User Options for "list tasks"
+
+| User Says | Action |
+|-----------|--------|
+| "list tasks" | Show ONLY active tasks (pending/in_progress/blocked), properly filtered and organized |
+| "list all tasks" | Show ALL tasks including completed |
+| "list completed tasks" | Show only completed tasks |
+| "show task 51" | Show specific task details - USE ReadFile on appropriate TODO.md |
+
+---
+
+## Quick Reference Tables
+
+All TODO.md files should have a **Quick Reference** table at the top for fast parsing:
+
+```markdown
+## Quick Reference - Active Tasks
+
+| ID | Title | Status | Priority |
+|----|-------|--------|----------|
+| 9  | Clean Up CLI... | Pending | High |
+```
+
+**⚠️ Table Maintenance Rules:**
+1. **Active tasks only** - Never include completed tasks in Quick Reference
+2. **Keep sorted** - Priority order: Critical → High → Medium → Low
+3. **Remove on completion** - Immediately delete row when task completes
+4. **Consistent columns** - All tables use: ID, Title, Status, Priority
+
+**⚠️ CRITICAL: When marking a task complete, you MUST:**
+1. Update the task's status to `✅ Complete` in its detailed section
+2. **REMOVE the row from Quick Reference table** (this table is ONLY for active tasks)
+3. Add completion date to the task description
+
+---
+
+## Task Location Rules (CRITICAL)
+
+| File | What Goes Here | Examples |
+|------|---------------|----------|
+| **Root TODO.md** | Cross-project tasks only (spans 2+ subprojects) | Task 62: Share Deletion (contracts + CLI) |
+| **cli/TODO.md** | CLI-only tasks | Task 61: Discovery Module CLI Commands |
+| **contracts/TODO.md** | Contract-only tasks | Task 58: Auto-Renewal Implementation |
+| **discovery/TODO.md** | Discovery service tasks | Task 108: REST API Endpoints |
+
+**If a task appears in the wrong file:**
+- Move single-project tasks from root to appropriate subproject
+- Keep cross-project tasks in root only
+- Add "See root TODO.md" note in subproject tables for cross-project tasks
 
 ---
 
@@ -119,7 +220,7 @@ Always end with a summary:
 
 ### 1. When Starting Work
 
-1. Scan for all TODO.md files
+1. Dynamically discover all TODO.md files using `find`
 2. Read relevant TODO.md files to understand active tasks
 3. Identify the task you're working on by ID
 
@@ -135,22 +236,30 @@ Always end with a summary:
 
 When user says a task is complete:
 1. Find the task in the appropriate TODO.md
-2. Update status to `complete`
-3. Add completion date if not present
-4. Update any relevant context
+2. Update status to `complete` (or ✅ Complete) in the task description
+3. **REMOVE from Quick Reference table** - delete the entire row
+4. Add completion date if not present
+5. Move to "Completed Tasks" section if there is one
+6. Update any relevant context
 
 ### 4. Creating New Tasks
 
-**Location Rule:**
+**Location Rule (CRITICAL):**
 - Create task in the **project-specific TODO.md** where the work will be done
 - Only use root `./TODO.md` for **cross-project** tasks (affects multiple subprojects)
-- Example: Backend fixes go in `backend/TODO.md`, not root
+- **Cross-project indicator**: Task requires changes in 2+ subprojects (contracts + CLI, etc.)
 
 **Steps:**
 1. Find the highest existing task ID across ALL TODO.md files
 2. Next task gets ID = highest + 1
 3. Add to the **appropriate project-level TODO.md** (not always root!)
-4. Include: ID, title, status, priority, description, files
+4. **Update Quick Reference table** in that file (active tasks only)
+5. For cross-project tasks: Add note in subproject TODOs: "See root TODO.md for task X"
+
+**Find highest task ID:**
+```bash
+find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -n | tail -1
+```
 
 ### 5. Removing/Deleting Tasks
 
@@ -159,6 +268,8 @@ When user says a task is complete:
 - Do NOT try to reuse the ID number for future tasks
 - IDs are sequential and never reused - gaps are acceptable
 - Example: If tasks 1,2,3 exist and task 2 is deleted, next task is 4 (not 2)
+
+---
 
 ## Example Task Format
 
@@ -179,64 +290,24 @@ When user says a task is complete:
 - `.envrc`
 ```
 
-## Commands
+---
+
+## Auto-Discover TODO Files
+
+**CRITICAL: Always dynamically discover TODO.md files - never hardcode paths.**
 
 ```bash
-# Find all TODO.md files
-todo_files=$(find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target | grep -v ".git")
-
-# List active tasks from quick reference tables (FAST)
-for file in $todo_files; do
-  awk '/^\| [0-9]+ \|/ && !/ID.*Title/' "$file" 2>/dev/null
-done
-
-# Parse specific status from tables
-for file in $todo_files; do
-  awk '/^\| [0-9]+ \|/ && /Pending/' "$file" 2>/dev/null
-done
-
-# Find next available task ID
-find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -n | tail -1
+# Find all TODO.md files dynamically
+find . -name "TODO.md" -type f 2>/dev/null | grep -v node_modules | grep -v target
 ```
 
-## Listing Tasks for Users
+**Dynamically detected locations:**
+| Path | Project | Task Type |
+|------|---------|-----------|
+| `./TODO.md` | Root | Cross-project tasks (spans 2+ subprojects) |
+| `./cli/TODO.md` | CLI | CLI-only tasks |
+| `./contracts/TODO.md` | Smart Contracts | Contract-only tasks |
+| `./discovery/TODO.md` | Discovery Service | Discovery service tasks |
+| `./drasil-co-site/TODO.md` | Website | Website tasks |
 
-When the user asks to "list tasks", simply display the **Quick Reference tables** from each TODO.md file:
-
-**Simple approach:**
-1. Read the Quick Reference table from each TODO.md
-2. Display them grouped by file/location
-3. The tables are maintained by this skill with proper status/priority ordering
-
-**Example output:**
-```
-## Root (./TODO.md)
-
-| ID | Title | Status | Priority | Location |
-|----|-------|--------|----------|----------|
-| 3 | Contract-First Feature Testing | Pending | Medium | root |
-| 5 | Full Test Coverage on PRE Module | Pending | Medium | root |
-| 9 | Clean Up CLI for Publication | Pending | High | root |
-
-## Backend (./backend/TODO.md)
-
-| ID | Title | Status | Priority |
-|----|-------|--------|----------|
-| 13 | Complete API Implementation | In Progress | High |
-| 17 | Minimize Cache Usage | Pending | Medium |
-| 22 | Serialization Completion | Blocked | Medium |
-
-## Frontend (./frontend/TODO.md)
-
-| ID | Title | Status | Priority |
-|----|-------|--------|----------|
-| 33 | Multi-Currency Test Fixes | Pending | High |
-| 35 | Test Suite Repair - Phase 3 | In Progress | Medium |
-| 36 | Add Coverage Tooling | Blocked | Medium |
-```
-
-**Rules:**
-- The Quick Reference tables are the **source of truth** for active tasks
-- This skill maintains the tables (organizing by status/priority/location)
-- For listing: just display what's in the tables - no re-sorting needed
-- Assume tables are in proper state when listing
+**⚠️ IMPORTANT:** New subprojects may be added anytime. **Always use the `find` command** to discover TODO.md files dynamically.
