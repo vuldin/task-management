@@ -11,9 +11,11 @@ show_section() {
   printf '\n## %s\n\n' "$_name"
   printf '| ID | Title | Status | Priority |\n'
   printf '|----|-------|--------|----------|\n'
-  awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && !/ID.*Title/ && !/Complete/ && !/✅/ && !/Done/ {
+  awk '/## Quick Reference/{qr=1; next} /## Detailed Task Descriptions/{qr=0} qr && /^\| [0-9]+ \|/ && !/ID.*Title/ {
     gsub(/^\|[ \t]*/, ""); gsub(/[ \t]*\|$/, "")
     split($0, p, /\s*\|\s*/)
+    # Filter out completed tasks based on Status column (p[3])
+    if (p[3] ~ /Complete/ || p[3] ~ /✅/ || p[3] ~ /Done/) next
     if (p[4] ~ /Critical/) ord=1; else if (p[4] ~ /High/) ord=2; else if (p[4] ~ /Medium/) ord=3; else ord=4
     printf "%d|%04d|%s|%s|%s|%s\n", ord, p[1], p[1], p[2], p[3], p[4]
   }' "$_file" | sort -t'|' -k1,1n -k2,2n | cut -d'|' -f3- | while IFS='|' read -r id title status priority; do
@@ -45,7 +47,11 @@ find . -mindepth 2 -name "TODO.md" -type f 2>/dev/null | \
 # Summary
 printf "\n"
 printf '%s\n' "---------------------------------------------------------------------"
-cnt=$(find . -name "TODO.md" -exec awk '/## Detailed Task Descriptions/{exit} /^\| [0-9]+ \|/ && !/ID.*Title/ && !/Complete/ && !/✅/ && !/Done/' {} \; 2>/dev/null | wc -l)
-next=$(find . -name "TODO.md" -exec grep -h "^#### [0-9]" {} + 2>/dev/null | sed 's/.*#### \([0-9]*\).*/\1/' | sort -n | tail -1)
+cnt=$(find . -name "TODO.md" -exec awk '/## Detailed Task Descriptions/{exit} /^\| [0-9]+ \|/ && !/ID.*Title/ {
+  split($0, p, /\s*\|\s*/)
+  if (p[4] ~ /Complete/ || p[4] ~ /✅/ || p[4] ~ /Done/) next
+  print
+}' {} \; 2>/dev/null | wc -l)
+next=$(find . -name "TODO.md" -exec grep -h "^###\+ [0-9]" {} + 2>/dev/null | sed 's/.*### \([0-9]*\).*/\1/' | sort -n | tail -1)
 printf "%s active tasks across all projects.\n" "$cnt"
 printf "Next available task ID: %s\n\n" "$((next + 1))"

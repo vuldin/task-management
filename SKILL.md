@@ -49,6 +49,44 @@ This skill provides task tracking across nested projects with automatic TODO.md 
 
 ---
 
+## TODO.md File Header Template
+
+Every TODO.md file should include a header comment block that references this skill:
+
+```markdown
+<!-- 
+TODO.md - Task Tracking for [Project Name]
+
+⚠️ IMPORTANT: When editing this file, ALWAYS follow the task-management skill instructions:
+- Location: `.claude/skills/task-management/SKILL.md`
+- Key rules: Sequential IDs, move completed tasks to "Completed Tasks" section, 
+  keep Quick Reference clean (active tasks only)
+
+For details, read the skill file or ask: "what are the task management rules?"
+-->
+
+# [Project] Tasks
+
+*This file tracks tasks for [project]. Cross-project tasks are in `/TODO.md`.*
+
+**Key Documents**:
+- `docs/[prd].md` - Product Requirements
+
+**Quick Links**:
+- [Active Tasks](#quick-reference---active-tasks)
+- [Completed Tasks](#completed-tasks)
+
+---
+
+## Quick Reference - Active Tasks
+
+| ID | Title | Status | Priority |
+|----|-------|--------|----------|
+...
+```
+
+---
+
 ## Task ID System
 
 - **Sequential IDs**: Start at 1, increment across ALL subprojects
@@ -140,11 +178,26 @@ All TODO.md files should have a **Quick Reference** table at the top for fast pa
 
 When user says a task is complete, follow these steps:
 
-#### Step 1: Update Task Status
+#### Step 1: Update Task Status and Move to Completed Section
 1. Find the task in the appropriate TODO.md
 2. Update status to `✅ Complete` in the task description
 3. Add completion date if not present
-4. Move to "Completed Tasks" section if there is one
+4. **Move the entire task entry to a "Completed Tasks" section**
+   - If the section doesn't exist, **CREATE IT** at the end of the file
+   - The section header should be: `## Completed Tasks`
+   - Place completed tasks in reverse chronological order (newest first)
+
+**Example of creating the Completed Tasks section:**
+```markdown
+## Completed Tasks
+
+#### 49. Dev Environment Speedup
+**Status**: ✅ Complete  
+**Completed**: Feb 5, 2026  
+**Priority**: High  
+**Description**: Optimize shell loading with direnv
+...
+```
 
 #### Step 2: Remove from Quick Reference (MANDATORY)
 **Delete the task row from the Quick Reference table.** This table is ONLY for active tasks.
