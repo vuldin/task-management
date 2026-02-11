@@ -241,10 +241,10 @@ EOF
     
     # Validate
     log_info "Running validation..."
-    if "$SCRIPT_DIR/validate-todos.sh" 2>/dev/null; then
+    if "$SCRIPT_DIR/validate-todos.py" 2>/dev/null; then
         log_info "✓ Task $TASK_ID successfully completed and validated!"
     else
-        log_warn "Validation found issues - run 'validate-todos.sh --verbose' for details"
+        log_warn "Validation found issues - run 'validate-todos.py' for details"
     fi
 }
 

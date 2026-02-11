@@ -19,11 +19,17 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Find project root and task files
-find_task_files() {
-    local root_dir
-    root_dir="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-    find "$root_dir" -maxdepth 3 -name "TODO.md" -type f 2>/dev/null | sort
+# Project root directory
+ROOT_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
+# Find TODO.md files
+find_todo_files() {
+    find "$ROOT_DIR" -maxdepth 3 -name "TODO.md" -type f 2>/dev/null | sort
+}
+
+# Find COMPLETED.md files
+find_completed_files() {
+    find "$ROOT_DIR" -maxdepth 3 -name "COMPLETED.md" -type f 2>/dev/null | sort
 }
 
 # Emoji mappings
@@ -52,9 +58,9 @@ get_project_name() {
     local file="$1"
     local dir
     dir=$(dirname "$file")
-    
-    if [[ "$dir" == "." ]] || [[ "$dir" == "$PWD" ]]; then
-        echo "Root"
+
+    if [[ "$dir" == "$ROOT_DIR" ]]; then
+        echo "Cross-Project"
     else
         basename "$dir" | tr '-' ' ' | sed -E 's/\b\w/\u&/g'
     fi
@@ -154,49 +160,67 @@ show_file_tasks() {
 
 # Main
 main() {
-    local files
-    files=$(find_task_files)
-    
-    if [[ -z "$files" ]]; then
+    local todo_files completed_files
+    todo_files=$(find_todo_files)
+    completed_files=$(find_completed_files)
+
+    if [[ -z "$todo_files" ]]; then
         echo "No TODO.md files found"
         exit 1
     fi
-    
-    # Show each project's tasks
-    for file in $files; do
-        show_file_tasks "$file"
-    done
-    
-    # Summary
+
+    # Collect all files to display
+    local all_display_files="$todo_files"
+    if [[ $INCLUDE_COMPLETED -eq 1 ]] && [[ -n "$completed_files" ]]; then
+        all_display_files="$todo_files"$'\n'"$completed_files"
+    fi
+
+    # Show each project's tasks (skip empty projects)
+    local shown_any=0
+    while IFS= read -r file; do
+        local tasks
+        tasks=$(extract_tasks "$file" "$INCLUDE_COMPLETED")
+        if [[ -n "$tasks" ]]; then
+            show_file_tasks "$file"
+            shown_any=1
+        fi
+    done <<< "$all_display_files"
+
+    if [[ $shown_any -eq 0 ]]; then
+        echo "No active tasks in any project."
+        echo ""
+    fi
+
+    # Summary - count active from TODO.md files
     local total_active=0
-    local total_completed=0
     local highest_id=0
-    
+
     while IFS= read -r file; do
-        local file_active file_completed file_max
+        local file_active file_max
         file_active=$(extract_tasks "$file" 0 | wc -l)
-        file_completed=$(extract_tasks "$file" 1 | grep -c "complete" || true)
         file_max=$(grep -oE '<!-- TASK:[0-9]+ -->' "$file" 2>/dev/null | sed 's/<!-- TASK://;s/ -->//' | sort -n | tail -1 || echo "0")
-        
+
         total_active=$((total_active + file_active))
-        total_completed=$((total_completed + file_completed))
-        
         if [[ "$file_max" -gt "$highest_id" ]]; then
             highest_id=$file_max
         fi
-    done <<< "$files"
-    
-    # Also check COMPLETED.md files for highest ID
-    local root_dir
-    root_dir="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-    while IFS= read -r file; do
-        local file_max
-        file_max=$(grep -oE '<!-- TASK:[0-9]+ -->' "$file" 2>/dev/null | sed 's/<!-- TASK://;s/ -->//' | sort -n | tail -1 || echo "0")
-        if [[ "$file_max" -gt "$highest_id" ]]; then
-            highest_id=$file_max
-        fi
-    done < <(find "$root_dir" -maxdepth 3 -name "COMPLETED.md" -type f 2>/dev/null)
-    
+    done <<< "$todo_files"
+
+    # Count completed from COMPLETED.md files and check for highest ID
+    local total_completed=0
+    if [[ -n "$completed_files" ]]; then
+        while IFS= read -r file; do
+            local file_completed file_max
+            file_completed=$(extract_tasks "$file" 1 | wc -l)
+            file_max=$(grep -oE '<!-- TASK:[0-9]+ -->' "$file" 2>/dev/null | sed 's/<!-- TASK://;s/ -->//' | sort -n | tail -1 || echo "0")
+
+            total_completed=$((total_completed + file_completed))
+            if [[ "$file_max" -gt "$highest_id" ]]; then
+                highest_id=$file_max
+            fi
+        done <<< "$completed_files"
+    fi
+
     echo "---------------------------------------------------------------------"
     if [[ $INCLUDE_COMPLETED -eq 1 ]]; then
         echo "$((total_active + total_completed)) tasks total ($total_active active, $total_completed completed)"

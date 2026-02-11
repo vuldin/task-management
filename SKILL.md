@@ -1,33 +1,36 @@
 ---
-name: task-management
-description: Manage tasks across nested projects with sequential ID tracking. Use when working with TODO.md files, task management, marking tasks complete/started/blocked, or tracking project status across multiple subprojects. Auto-discovers TODO.md files in subdirectories and maintains sequential ID management.
+name: task
+description: Manage tasks across nested projects. Use with /task list, /task complete [id], /task update [id], /task show [id], /task validate.
+argument-hint: [list|list-all|complete|update|show|validate|new] [task-id]
 ---
 
 # Task Management
 
 This skill provides task tracking across nested projects with strict formatting for reliable automation.
 
+**Arguments received:** $ARGUMENTS
+
 ---
 
-## 🚨 CRITICAL: HANDLING "list tasks" COMMAND
+## Slash Command Routing
 
-**WHEN THE USER SAYS "list tasks", YOU MUST:**
+Based on the argument, run the appropriate action:
 
-1. **RUN THE SCRIPT** - Execute `.claude/skills/task-management/scripts/list-tasks.sh`
-2. **COPY THE OUTPUT INTO YOUR RESPONSE** - The script output goes directly in your response message
+| Command | Action |
+|---------|--------|
+| `/task` or `/task list` | Run `scripts/list-tasks.sh` and copy output into response |
+| `/task list-all` | Run `scripts/list-tasks.sh --include-completed` and copy output into response |
+| `/task complete <id>` | Run `scripts/complete-task.sh <id>` |
+| `/task update <id> [--status <v>] [--priority <v>] [--title <v>]` | Run `scripts/update-task.sh <id> [flags]` |
+| `/task show <id>` | Read the task from the appropriate TODO.md or COMPLETED.md |
+| `/task validate` | Run `scripts/validate-todos.py` |
+| `/task new` | Follow the "Creating a New Task" workflow below |
 
-**Example of CORRECT response:**
-```
-## Root
+All script paths are relative to `.claude/skills/task-management/`.
 
-| ID | Title | Status | Priority |
-|----|-------|--------|----------|
-| 1  | Task One | 📋 Pending | 🔴 High |
-```
-
-**⛔ NEVER:**
-- Run validation checks during `list tasks`
-- Fix TODO.md files during `list tasks`
+**⛔ NEVER during list commands:**
+- Run validation checks
+- Fix TODO.md files
 - Add extra summaries after the script output
 
 ---
@@ -238,13 +241,15 @@ See SKILL.md for completion workflow.
 
 ## User Commands
 
-| User Says | Action |
-|-----------|--------|
-| "list tasks" | Run `scripts/list-tasks.sh` |
-| "list all tasks" | Run `scripts/list-tasks.sh --include-completed` |
-| "show task 51" | Read task from appropriate TODO.md |
-| "mark task 51 complete" | Run `scripts/complete-task.sh 51` |
-| "validate tasks" | Run `scripts/validate-todos.sh` |
+| Command | Action |
+|---------|--------|
+| `/task` or `/task list` | Run `scripts/list-tasks.sh` |
+| `/task list-all` | Run `scripts/list-tasks.sh --include-completed` |
+| `/task show 51` | Read task from appropriate TODO.md |
+| `/task complete 51` | Run `scripts/complete-task.sh 51` |
+| `/task update 51 --status in_progress` | Run `scripts/update-task.sh 51 --status in_progress` |
+| `/task validate` | Run `scripts/validate-todos.py` |
+| `/task new` | Create a new task using the workflow below |
 
 ---
 
@@ -252,9 +257,9 @@ See SKILL.md for completion workflow.
 
 ### Creating a New Task
 
-1. Find the next available task ID:
+1. Find the next available task ID (shown at the bottom of list output):
    ```bash
-   .claude/skills/task-management/scripts/next-id.sh
+   .claude/skills/task-management/scripts/list-tasks.sh
    ```
 
 2. Determine the correct file:
@@ -284,7 +289,7 @@ See SKILL.md for completion workflow.
 
 5. Validate:
    ```bash
-   .claude/skills/task-management/scripts/validate-todos.sh
+   .claude/skills/task-management/scripts/validate-todos.py
    ```
 
 ### Completing a Task (USE THE SCRIPT)
@@ -310,6 +315,25 @@ This script will:
 - Maintains proper ordering in COMPLETED.md
 - Keeps Quick Reference in sync
 
+### Updating a Task
+
+**ALWAYS use the update script** - never manually edit task metadata:
+
+```bash
+.claude/skills/task-management/scripts/update-task.sh 3 --status in_progress
+.claude/skills/task-management/scripts/update-task.sh 7 --priority critical --title "Urgent fix"
+```
+
+This script will:
+1. Find the task in TODO.md files
+2. Validate the new field values
+3. Apply updates (status, priority, and/or title)
+4. Show before/after for changed fields
+5. Regenerate Quick Reference
+6. Validate the result
+
+**Note:** To mark a task as complete, use `complete-task.sh` instead.
+
 ---
 
 ## Task Location Rules
@@ -324,7 +348,7 @@ This script will:
 **If a task is in the wrong file:**
 - Move it to the correct file
 - Run `regenerate-qr.sh` on both files
-- Run `validate-todos.sh` to verify
+- Run `validate-todos.py` to verify
 
 ---
 
@@ -343,12 +367,12 @@ The validation script checks:
 
 Run validation:
 ```bash
-.claude/skills/task-management/scripts/validate-todos.sh
+.claude/skills/task-management/scripts/validate-todos.py
 ```
 
 With verbose output:
 ```bash
-.claude/skills/task-management/scripts/validate-todos.sh --verbose
+.claude/skills/task-management/scripts/validate-todos.py --verbose
 ```
 
 ---
@@ -360,9 +384,8 @@ With verbose output:
 | `list-tasks.sh` | List all active tasks |
 | `list-tasks.sh --include-completed` | List all tasks including completed |
 | `complete-task.sh <id>` | Mark task complete and move to COMPLETED.md |
-| `validate-todos.sh` | Validate all TODO.md files |
-| `validate-todos.sh --fix` | Fix auto-fixable issues |
-| `next-id.sh` | Show next available task ID |
+| `update-task.sh <id> [--status <v>] [--priority <v>] [--title <v>]` | Update task fields in TODO.md |
+| `validate-todos.py` | Validate all TODO.md files |
 | `regenerate-qr.sh <file>` | Regenerate Quick Reference for one file |
 | `regenerate-qr.sh --all` | Regenerate all Quick References |
 
@@ -387,24 +410,6 @@ A task with `status: complete` is still in a TODO.md file. Run `complete-task.sh
 
 ---
 
-## Migration from Old Format
-
-If you have TODO.md files in the old format:
-
-```bash
-# Run the migration script
-.claude/skills/task-management/scripts/migrate.sh
-
-# This will:
-# - Create COMPLETED.md files for completed tasks
-# - Convert active tasks to new format
-# - Remove old "Completed Tasks" sections
-# - Regenerate Quick References
-# - Report any issues found
-```
-
----
-
 ## File Organization
 
 ```
@@ -422,8 +427,7 @@ project/
     └── scripts/
         ├── list-tasks.sh
         ├── complete-task.sh
-        ├── validate-todos.sh
-        ├── regenerate-qr.sh
-        ├── next-id.sh
-        └── migrate.sh
+        ├── update-task.sh
+        ├── validate-todos.py
+        └── regenerate-qr.sh
 ```
